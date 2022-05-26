@@ -23,7 +23,6 @@ def empty_set {A : Type} : Subset A :=
 def set_intersect {A : Type} (s1 s2 : Subset A) : Subset A :=
 λ x => (s1 x) ∨ (s2 x)
 
-
 @[simp] def equal {A : Type} (s1 s2 : Subset A) : Prop :=
   ∀ x , s1 x ↔ s2 x
 
@@ -31,66 +30,47 @@ def set_intersect {A : Type} (s1 s2 : Subset A) : Subset A :=
 | some _  => true
 | none    => false
 
+@[simp]
+noncomputable def partial_singleton {A B : Type} (a : Option A) (b : Option B) : Partial A B :=
+  λ x => (Option.bind a (λ a1 => if x = a1 then b else none))
+
 def disjoint {A B : Type} (p1 p2 : Partial A B) : Prop :=
 set_intersect (dom p1) (dom p2) = empty_set
 
 def union {A B : Type} (p1 p2 : Partial A B) : Partial A B :=
 λ x => (p1 x) <|> (p2 x)
 
+@[simp]
+def in_partial {A B : Type} (a : A) (p : Partial A B) : Prop :=
+  match p a with
+  | some _ => true
+  | none   => false
+
+@[simp]
 def asrt (q : Asrt) (s : Store) (h : Heap) : Prop := match q with
   | literal b => b
   | emp       => ∀ x , (dom h) x = false
-  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2)
+  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) ∧ partial_singleton (s v1) (s v2) = h
   | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
   | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
 
-theorem e_true : ∃ (s : Store) (h : Heap) , True := by
-let s : Store := λ x => none
-let h : Heap := λ x => none
-exists s
-exists h
-simp
+@[simp]
+def domain_exact_impl (q : Asrt) : Prop := match q with
+  | literal b     => False
+  | emp           => True
+  | singleton _ _ => True
+  | sep q1 q2     => (domain_exact_impl q1) ∧ (domain_exact_impl q2)
+  | sepimp q1 q2  => (domain_exact_impl q1) ∧ (domain_exact_impl q2)
 
-def same_domains : Heap → Heap → Prop :=
-λ h h' => ((dom h) = (dom h'))
+@[simp]
+def domain_exact_theory (q : Asrt) : Prop := ((∃ s1 h1 , (asrt q s1 h1)) ∧ (∀ s h h' , (asrt q s h) ∧ (asrt q s h') → equal (dom h) (dom h')))
 
-theorem sd {h h' : Heap} : ((dom h) = (dom h')) = same_domains h h' := by apply rfl
---theorem dd1 {p : Store → Heap → Heap → Prop}: ¬ (∀ (s : Store) (h h' : Heap) , ¬ (p s h h')) := by
-   --forall_to_exists
-
-/-
-theorem diff_domains : ¬ (∀ (s : Store) (h h' : Heap) , ¬ ((dom h) = (dom h'))) := by
-  -- p := λ (s : Store) (h h' : Heap) => ¬ (dom h) = (dom h')
-  conv =>
-    rhs
-    intro s
-    conv =>
-      intro h
-      conv =>
-        intro h'
-        rhs
-        apply sd
-  admit
-  --revert
-
-  --apply forall_to_exists
-
--/
-/-
-def pred (b : Bool) (s : Store) (h h' : Heap) : Prop := (∃ s1 h1 , (asrt (literal b) s1 h1)) ∧ (asrt (literal b) s h) ∧ (asrt (literal b) s h') → (dom h) = (dom h')
-
-
-theorem domain_exact_literal1 (p : Store → Heap → Heap → Prop) : ¬(∀ s h h' , (p s h h')) := by {
-
-}
--/
-
-theorem domain_exact_literal { b : Bool} : ¬((∃ s1 h1 , (asrt (literal b) s1 h1)) ∧ (∀ s h h' , (asrt (literal b) s h) ∧ (asrt (literal b) s h') → equal (dom h) (dom h'))) := by {
+theorem domain_exact_correct_literal: ∀ b , (domain_exact_impl (literal b)) ↔ (domain_exact_theory (literal b)) := by {
+  simp;
+  intro b;
   have s  : Store := (λ (n : Nat) => none);
   have h  : Heap := (λ (n : Nat) => none);
   have h' : Heap := (λ (n : Nat) => some n);
-  simp [asrt];
-  simp [equal];
   match b with
   | true => {
     intro hyp;
@@ -105,33 +85,58 @@ theorem domain_exact_literal { b : Bool} : ¬((∃ s1 h1 , (asrt (literal b) s1 
     have ⟨ _, ⟨ _ , con ⟩⟩ := hyp.left;
     contradiction;
   }
-/-
-  rw [exists_same_as_forall_3]
-  have s  : Store := (λ (n : Nat) => none);
-  have h  : Heap := (λ (n : Nat) => none);
-  have h' : Heap := (λ (n : Nat) => some n);
-  apply Exists.intro s;
-  apply Exists.intro h;
-  apply Exists.intro h';
-  rw[not_imp];
--/
 }
 
-/-
-    simp [asrt]
-    cases b with
-    | true => {
-      simp [e_true]
-      apply byContradiction (
-        λ x : ¬¬ (∀ s h h' , (dom h) = (dom h')) => show false by
+theorem domain_exact_correct_emp : (domain_exact_impl emp) ↔ (domain_exact_theory emp) := by {
+  simp;
+  apply And.intro;
+  case left => {
+    exists (λ (n : Nat) => none);
+    exists (λ (n : Nat) => none);
+    simp;
+  }
+  case right => {
+    intro s h h';
+    intro ⟨ l , r ⟩;
+    intro x;
+    rw [(l x)];
+    rw [(r x)];
+    simp;
+  }
+}
 
-      )
+theorem domain_exact_correct_singleton v1 v2 : (domain_exact_impl (singleton v1 v2)) ↔ (domain_exact_theory (singleton v1 v2)) := by {
+  simp;
+  apply And.intro;
+  case left => {
+    exists (λ (n : Nat) => some n);
+    exists (λ (n : Nat) => if n = v1 then some v2 else none);
+    simp;
+    simp [Option.bind];
+    sorry;
+  }
+  case right => {
+    simp [Option.bind];
+    intro s h h';
+    intro ⟨ ⟨ l, ⟨ a , ⟨ c , d ⟩ ⟩ ⟩ , ⟨ r , _ ⟩ ⟩;
+    intro x;
+    apply Iff.intro;
+    case mp  => {
+      sorry;
     }
-
-    | false => sorry
--/
-/-
-theorem domain_exact {q : Asrt} : (∀ s h h' , (∃ s1 h1 , (asrt q s1 h1)) ∧ (asrt q s h) ∧ (asrt q s h') → (dom h) = (dom h')) := by {
-  sorry
+    case mpr => {
+      sorry;
+    }
+  }
 }
--/
+
+
+theorem domain_exact_correct : ∀ q , (domain_exact_impl q) ↔ (domain_exact_theory q) := by
+  intro q;
+  match q with
+  | literal b     => exact (domain_exact_correct_literal b);
+  | emp           => exact (domain_exact_correct_emp);
+  | singleton _ _ => sorry;
+  | sep q1 q2     => sorry;
+  | sepimp q1 q2  => sorry;
+}
