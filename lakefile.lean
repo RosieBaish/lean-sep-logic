@@ -1,6 +1,11 @@
 import Lake
-open Lake DSL
+open System Lake DSL
 
 package sep_logic {
-  -- add configuration options here
+  dependencies := #[
+    {
+      name := `first_order_leaning
+      src := Source.path (FilePath.mk ".." / "first_order_leaning")
+    }
+  ]
 }
