@@ -13,7 +13,8 @@ open Asrt
 def Partial (A B : Type): Type := A → Option B
 
 def Store : Type := Partial Nat Nat
-def Heap : Type := Partial Nat Nat
+def SubHeap : Type := Partial Nat Nat
+def Heap : Type := Nat → Nat
 
 def Subset (A : Type) : Type := A → Prop
 
@@ -23,120 +24,157 @@ def empty_set {A : Type} : Subset A :=
 def set_intersect {A : Type} (s1 s2 : Subset A) : Subset A :=
 λ x => (s1 x) ∨ (s2 x)
 
+def set_disjoint {A : Type} (s1 s2 : Subset A) : Prop :=
+∀ x , ¬((s1 x) ∧ (s2 x))
+
+def set_subset {A : Type} (s1 s2 : Subset A) : Prop :=
+∀ x , (s1 x) → (s2 x)
+
+-- s1 / s2
+def set_difference {A : Type} (s1 s2 : Subset A) : Subset A :=
+λ x => (s1 x) ∧ ¬(s2 x)
+
 @[simp] def equal {A : Type} (s1 s2 : Subset A) : Prop :=
   ∀ x , s1 x ↔ s2 x
 
-@[simp] def dom {A B : Type}  (p : Partial A B) : Subset A := λ a => match (p a) with
-| some _  => true
-| none    => false
-
-@[simp]
-noncomputable def partial_singleton {A B : Type} (a : Option A) (b : Option B) : Partial A B :=
-  λ x => (Option.bind a (λ a1 => if x = a1 then b else none))
+@[simp] def dom {A B : Type}  (p : Partial A B) : Subset A := λ a => (p a).isSome
 
 def disjoint {A B : Type} (p1 p2 : Partial A B) : Prop :=
 set_intersect (dom p1) (dom p2) = empty_set
 
-def union {A B : Type} (p1 p2 : Partial A B) : Partial A B :=
-λ x => (p1 x) <|> (p2 x)
+def partial_of {A B : Type} (p : Partial A B) (t : A → B) : Prop :=
+  ∀ x , match p x with
+  | some y => (y = t x)
+  | none   => True
+
+noncomputable def union {A : Type} (p1 p2 : Partial A A) : Partial A A :=
+λ x => if (p1 x) = none then (p2 x) else (p1 x)
 
 @[simp]
-def in_partial {A B : Type} (a : A) (p : Partial A B) : Prop :=
-  match p a with
-  | some _ => true
-  | none   => false
+def in_partial {A B : Type} (a : A) (p : Partial A B) : Prop := (p a).isSome
 
-@[simp]
-def asrt (q : Asrt) (s : Store) (h : Heap) : Prop := match q with
+def asrt (q : Asrt) (s : Store) (h : SubHeap) : Prop := match q with
   | literal b => b
   | emp       => ∀ x , (dom h) x = false
-  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) ∧ partial_singleton (s v1) (s v2) = h
+  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) ∧ ∀ x , (dom h) x = (some x = (s v1))
   | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
   | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
 
 @[simp]
-def domain_exact_impl (q : Asrt) : Prop := match q with
-  | literal b     => False
-  | emp           => True
-  | singleton _ _ => True
-  | sep q1 q2     => (domain_exact_impl q1) ∧ (domain_exact_impl q2)
-  | sepimp q1 q2  => (domain_exact_impl q1) ∧ (domain_exact_impl q2)
+def check (q : Asrt) (s : Store) (h : Heap) : (Prop × Subset Nat) := match q with
+  | literal b => (b , empty_set)
+  | emp       => (True, empty_set)
+  | singleton v1 v2 => ((Option.map h (s v1)) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) , λ x => (some x = (s v1)))
+  | sep q1 q2 => let ⟨ b1 , m1 ⟩ := (check q1 s h); let ⟨ b2 , m2 ⟩ := (check q1 s h); (b1 ∧ b2 ∧ (set_disjoint m1 m2) , (set_intersect m1 m2))
+  | sepimp q1 q2 => let ⟨ b1 , m1 ⟩ := (check q1 s h); let ⟨ b2 , m2 ⟩ := (check q1 s h); (b1 → b2 ∧ set_subset m1 m2 , set_difference m2 m1)
 
-@[simp]
-def domain_exact_theory (q : Asrt) : Prop := ((∃ s1 h1 , (asrt q s1 h1)) ∧ (∀ s h h' , (asrt q s h) ∧ (asrt q s h') → equal (dom h) (dom h')))
-
-theorem domain_exact_correct_literal: ∀ b , (domain_exact_impl (literal b)) ↔ (domain_exact_theory (literal b)) := by {
+--  | literal b => b
+theorem equivalence_literal (s : Store) (h_tilde : Heap) (lit : Bool) : let ⟨ b , m ⟩ := (check (literal lit) s h_tilde); if b then (asrt (literal lit) s (λ x => some (h_tilde x))) ∨ (∀ h : SubHeap , (partial_of h h_tilde) → ((dom h) = m ↔ (asrt (literal lit) s h))) else ∀ h , ¬(asrt (literal lit) s h) := by {
   simp;
-  intro b;
-  have s  : Store := (λ (n : Nat) => none);
-  have h  : Heap := (λ (n : Nat) => none);
-  have h' : Heap := (λ (n : Nat) => some n);
-  match b with
-  | true => {
-    intro hyp;
-    have domains := hyp.right s (λ (n : Nat) => none) (λ (n : Nat) => some n) rfl;
-    have iffy := domains 0;
-    have contra := iffy.mpr;
-    apply contra;
-    simp;
+  cases Classical.em (lit = true) with
+  | inl a => {
+    rw[if_pos];
+    simp[a, asrt];
+    exact a;
   }
-  | false => {
-    intro hyp;
-    have ⟨ _, ⟨ _ , con ⟩⟩ := hyp.left;
-    contradiction;
+  | inr a => {
+    rw[if_neg];
+    simp[a, asrt];
+    exact a;
   }
 }
 
-theorem domain_exact_correct_emp : (domain_exact_impl emp) ↔ (domain_exact_theory emp) := by {
-  simp;
-  apply And.intro;
-  case left => {
-    exists (λ (n : Nat) => none);
-    exists (λ (n : Nat) => none);
-    simp;
+--  | emp       => ∀ x , (dom h) x = false
+theorem equivalence_emp (s : Store) (h_tilde : Heap) (lit : Bool) : let ⟨ b , m ⟩ := (check emp s h_tilde); if b then (asrt emp s (λ x => some (h_tilde x))) ∨ (∀ h : SubHeap , (partial_of h h_tilde) → ((dom h) = m ↔ (asrt emp s h))) else ∀ h , ¬(asrt emp s h) := by {
+  simp [asrt];
+  apply Or.inr;
+  intro h _;
+  apply Iff.intro;
+  case mp  => {
+    simp[empty_set];
+    intro h_def;
+    intro a;
+    rw[congrFun h_def a];
   }
-  case right => {
-    intro s h h';
-    intro ⟨ l , r ⟩;
-    intro x;
-    rw [(l x)];
-    rw [(r x)];
-    simp;
+  case mpr => {
+    intro a;
+    simp[empty_set];
+    simp[a];
   }
 }
-
-theorem domain_exact_correct_singleton v1 v2 : (domain_exact_impl (singleton v1 v2)) ↔ (domain_exact_theory (singleton v1 v2)) := by {
+--  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) ∧ ∀ x , (dom h) x = (some x = (s v1))
+theorem equivalence_singleton (s : Store) (h_tilde : Heap) (lit : Bool) : let ⟨ b , m ⟩ := (check (singleton v1 v2) s h_tilde); if b then (asrt (singleton v1 v2) s (λ x => some (h_tilde x))) ∨ (∀ h : SubHeap , (partial_of h h_tilde) → ((dom h) = m ↔ (asrt (singleton v1 v2) s h))) else ∀ h , ¬(asrt (singleton v1 v2) s h) := by {
   simp;
-  apply And.intro;
-  case left => {
-    exists (λ (n : Nat) => some n);
-    exists (λ (n : Nat) => if n = v1 then some v2 else none);
-    simp;
-    simp [Option.bind];
-    sorry;
-  }
-  case right => {
-    simp [Option.bind];
-    intro s h h';
-    intro ⟨ ⟨ l, ⟨ a , ⟨ c , d ⟩ ⟩ ⟩ , ⟨ r , _ ⟩ ⟩;
-    intro x;
+  split;
+  case inl temp => {
+    have ⟨ points , is_some_v1 , is_some_v2 ⟩ := temp;
+    rw[is_some] at is_some_v1;
+    have ⟨ s_v1 , some_v1 ⟩ := is_some_v1;
+    rw[is_some] at is_some_v2;
+    have ⟨ s_v2 , some_v2 ⟩ := is_some_v2;
+    apply Or.inr;
+    intro h partiality;
     apply Iff.intro;
     case mp  => {
-      sorry;
+      intro h_def;
+      have h_def1 := congrFun h_def;
+      apply And.intro;
+      case left => {
+        simp[partial_of] at partiality
+        --rw[Eq.symm points];
+        simp[Option.bind];
+        rw[some_v1] at h_def1;
+        simp at h_def1;
+        have h_def2 := h_def1 s_v1;
+        rw[is_some] at h_def2;
+        simp at h_def2;
+        have ⟨ hsv_1, a ⟩ := of_eq_true h_def2;
+
+        revert points;
+        simp[Option.map, Option.bind];
+        rw[some_v1];
+        rw[some_v2];
+        simp;
+        have part1 := partiality s_v1;
+        simp[a] at part1;
+        rw[(Eq.symm part1)];
+        intro;
+        simp[a];
+        assumption;
+      }
+      case right => {
+        simp[in_partial];
+        apply And.intro;
+        case left => rw[is_some]; exact is_some_v1;
+        case right => {
+          apply And.intro;
+          case left => rw[is_some]; exact is_some_v2;
+          case right => exact h_def1;
+        }
+      }
     }
     case mpr => {
-      sorry;
+      simp[asrt];
+      intro ⟨ points, is_some_v1, is_some_v2, same_domain ⟩;
+      apply funext;
+      exact same_domain;
     }
   }
+  case inr => {
+    sorry;
+  }
 }
+--  | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
+--  | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
 
 
-theorem domain_exact_correct : ∀ q , (domain_exact_impl q) ↔ (domain_exact_theory q) := by
-  intro q;
+
+
+theorem equivalence (s : Store) (h_tilde : Heap) : let ⟨ b , m ⟩ := (check q s h_tilde); if b then (asrt q s (λ x => some (h_tilde x))) ∨ (∀ h : SubHeap , (partial_of h h_tilde) → ((dom h) = m ↔ (asrt q s h))) else ∀ h , ¬(asrt q s h) := by {
   match q with
-  | literal b     => exact (domain_exact_correct_literal b);
-  | emp           => exact (domain_exact_correct_emp);
-  | singleton _ _ => sorry;
-  | sep q1 q2     => sorry;
-  | sepimp q1 q2  => sorry;
+  | literal lit => simp[equivalence_literal];
+  | emp => sorry;
+  | singleton v1 v2 => sorry;
+  | sep q1 q2 => sorry;
+  | sepimp q1 q2 => sorry;
 }
