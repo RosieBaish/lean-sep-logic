@@ -103,7 +103,7 @@ theorem equivalence_emp (s : Store) (h_tilde : Heap) (lit : Bool) : let ⟨ b , 
   }
 }
 --  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) ∧ ∀ x , (dom h) x = (some x = (s v1))
-theorem equivalence_singleton (s : Store) (h_tilde : Heap) (lit : Bool) : let ⟨ b , m ⟩ := (check (singleton v1 v2) s h_tilde); if b then (asrt (singleton v1 v2) s (λ x => some (h_tilde x))) ∨ (∀ h : SubHeap , (partial_of h h_tilde) → ((dom h) = m ↔ (asrt (singleton v1 v2) s h))) else ∀ h , ¬(asrt (singleton v1 v2) s h) := by {
+theorem equivalence_singleton (s : Store) (h_tilde : Heap) (lit : Bool) : let ⟨ b , m ⟩ := (check (singleton v1 v2) s h_tilde); if b then (asrt (singleton v1 v2) s (λ x => some (h_tilde x))) ∨ (∀ h : SubHeap , (partial_of h h_tilde) → ((dom h) = m ↔ (asrt (singleton v1 v2) s h))) else ∀ h , (partial_of h h_tilde) → ¬(asrt (singleton v1 v2) s h) := by {
   simp;
   split;
   case inl temp => {
@@ -160,8 +160,28 @@ theorem equivalence_singleton (s : Store) (h_tilde : Heap) (lit : Bool) : let �
       exact same_domain;
     }
   }
-  case inr => {
-    sorry;
+  case inr not_check => {
+    intro h;
+    simp[partial_of];
+    intro partiality;
+    revert not_check;
+    rw [← pp_imp_nn];
+    simp[asrt];
+    rw[is_some];
+    rw[is_some];
+    intro ⟨ points, ⟨ sv1 , sv1_proof ⟩ , ⟨ sv2 , sv2_proof ⟩ , d ⟩;
+    apply And.intro;
+    case left  => {
+      simp[Option.map, Option.bind, sv1_proof];
+      have part1 := partiality sv1;
+      simp [sv1_proof] at part1;
+      simp [sv2_proof];
+      simp [sv1_proof, sv2_proof, Option.bind] at points;
+      rw[points] at part1;
+      simp at part1;
+      rw[part1];
+    }
+    case right => apply And.intro (Exists.intro sv1 sv1_proof )  (Exists.intro sv2 sv2_proof);
   }
 }
 --  | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
