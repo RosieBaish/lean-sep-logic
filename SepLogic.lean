@@ -7,7 +7,7 @@ inductive Asrt where
   | emp : Asrt
   | singleton : Nat → Nat → Asrt
   | sep : Asrt → Asrt → Asrt
-  | sepimp : Asrt → Asrt → Asrt
+--  | sepimp : Asrt → Asrt → Asrt
 open Asrt
 
 def Partial (A B : Type): Type := A → Option B
@@ -103,7 +103,7 @@ def asrt (q : Asrt) (s : Store) (h : Heap) : Prop := match q with
   | emp       => ∀ x , (dom h) x = false
   | singleton v1 v2 => h (s v1) = some (s v2) ∧ ∀ x , (dom h) x ↔ (x = (s v1))
   | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
-  | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
+--  | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
 
 @[simp]
 noncomputable def check (q : Asrt) (s : Store) (h : Heap) : (Prop × Heap × Prop) := match q with
@@ -111,7 +111,7 @@ noncomputable def check (q : Asrt) (s : Store) (h : Heap) : (Prop × Heap × Pro
   | emp       => (True, empty_partial , True)
   | singleton v1 v2 => (h (s v1) = some (s v2) , singleton_partial_some (s v1) (h (s v1)) , True)
   | sep q1 q2 => let ⟨ b1 , m1 , t1 ⟩ := (check q1 s h); let ⟨ b2 , m2 , t2 ⟩ := (check q2 s h); (b1 ∧ b2 ∧ (disjoint m1 m2) ∧ t1 ∧ t2, (union m1 m2) , t1 ∧ t2)
-  | sepimp q1 q2 => let ⟨ b1 , m1 , t1 ⟩ := (check q1 s h); let ⟨ b2 , m2 , t2 ⟩ := (check q2 s h); (b1 → b2 ∧ partial_of m1 m2 , partial_difference m2 m1 , sorry)
+--  | sepimp q1 q2 => let ⟨ b1 , m1 , t1 ⟩ := (check q1 s h); let ⟨ b2 , m2 , t2 ⟩ := (check q2 s h); (b1 → b2 ∧ partial_of m1 m2 , partial_difference m2 m1 , sorry)
 
 theorem partiality (q : Asrt) (s : Store) (h_tilde : Heap) : partial_of (check q s h_tilde).2.1 h_tilde := by {
   match q with
@@ -188,7 +188,7 @@ theorem partiality (q : Asrt) (s : Store) (h_tilde : Heap) : partial_of (check q
       }
     }
   }
-  | sepimp q1 q2 => {
+/-  | sepimp q1 q2 => {
     have partial1 := partiality q1 s h_tilde;
     have partial2 := partiality q2 s h_tilde;
     simp[check];
@@ -236,11 +236,8 @@ theorem partiality (q : Asrt) (s : Store) (h_tilde : Heap) : partial_of (check q
         simp[proof];
       }
     }
-  }
+  }-/
 }
-
-mutual
-
 
 theorem uniqueness_of_ownership (q : Asrt) (s : Store) (h_tilde : Heap) :
   (check q s h_tilde).1 ∧ (check q s h_tilde).2.2 → ∀ h h' , (asrt q s h ∧ asrt q s h' → h = h') := by {
@@ -282,13 +279,42 @@ theorem uniqueness_of_ownership (q : Asrt) (s : Store) (h_tilde : Heap) :
     }
   }
   | sep q1 q2 => {
+    simp[asrt];
+    intro ⟨ ⟨ a1 , a2, a3 , a4 , a5 ⟩, b, c ⟩ h h' ⟨ ⟨ h1 , h2 , q1h1 , q2h2 , h1_disj_h2 , h_h1_h2 ⟩ , ⟨ h1' , h2' , q1h1' , q2h2' , h1_disj_h2' , h_h1_h2' ⟩ ⟩;
+    have q1_uniqueness := uniqueness_of_ownership q1 s h_tilde (And.intro a1 a4);
+    have q2_uniqueness := uniqueness_of_ownership q2 s h_tilde (And.intro a2 a5);
+    have h1_same := q1_uniqueness h1 h1' (And.intro q1h1 q1h1');
+    have h2_same := q2_uniqueness h2 h2' (And.intro q2h2 q2h2');
+    simp[h_h1_h2, h_h1_h2', h1_same, h2_same];
+  }
+  /-
+  | sepimp q1 q2 => {
+    simp;
     
     sorry;
-  }
-  | sepimp q1 q2 => sorry;
+  }-/
 }
 
-end
+theorem check_of_superset (q : Asrt) (s : Store) (h h_tilde : Heap) : (check q s h).1 ∧ partial_of h h_tilde → (check q s h) = (check q s h_tilde) := by {
+  match q with
+  | literal lit => simp[check];
+  | emp => simp[check];
+  | singleton v1 v2 => {
+    simp[check, partial_of];
+    intro ⟨ points, subset ⟩;
+    have proof := subset (s v1);
+    simp[points] at proof;
+    simp[points, proof];
+  }
+  | sep q1 q2 => {
+    simp[check];--, partial_of];
+    intro ⟨ ⟨ a1 , a2 , a3 , a4 , a5 ⟩ , b ⟩;
+    have c1 := check_of_superset q1 s h h_tilde (And.intro a1 b);
+    have c2 := check_of_superset q2 s h h_tilde (And.intro a2 b);
+    simp[c1, c2];
+  }
+--  | sepimp q1 q2 => sorry;
+}
 
 
 
@@ -384,12 +410,13 @@ theorem equivalence_sep (s : Store) (h_tilde : Heap) : (let ⟨ b , m , t ⟩ :=
       have ⟨ t1 , t2 ⟩ := temp;
       simp[asrt];
       intro ⟨ h1 , h2 , q1_h1 , q2_h2 , h1h2_disjoint , matching_unions ⟩;
-      simp at equivalence;
-      rw[equivalence];
       apply And.intro;
       case left => {
+        simp at equivalence;
+        rw[equivalence];
         rw[(if_pos t1)];
         
+--        have temp := uniqueness_of_ownership q1 s h_tilde;
         sorry;
       }
       sorry;
@@ -407,7 +434,7 @@ theorem equivalence (s : Store) (h_tilde : Heap) : (let ⟨ b , m , t ⟩ := (ch
   | emp => sorry;--simp[equivalence_emp];
   | singleton v1 v2 => sorry;--simp[equivalence_singleton];
   | sep q1 q2 => sorry;
-  | sepimp q1 q2 => sorry;
+--  | sepimp q1 q2 => sorry;
 }
 
 end
