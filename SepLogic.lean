@@ -52,7 +52,9 @@ noncomputable def singleton_partial_some {A B : Type} (a : A) (b : Option B) : P
 def disjoint {A B : Type} (p1 p2 : Partial A B) : Prop :=
 set_intersection (dom p1) (dom p2) = empty_set
 
-theorem disjoint_symm {A B : Type} {p1 p2 : Partial A B} : (disjoint p1 p2) ↔ (disjoint p2 p1) := by {
+infix:60 " ⊥ " => disjoint
+
+theorem disjoint_symm {A B : Type} {p1 p2 : Partial A B} : p1 ⊥ p2 ↔ p2 ⊥ p1 := by {
   simp[disjoint];
   simp[set_intersection];
   simp[empty_set];
@@ -81,12 +83,13 @@ def partial_of {A B : Type} (p1 p2 : Partial A B) : Prop :=
   | some y => (p2 x) = some y
   | none   => True
 
+infix:60 " ⊆ " => partial_of
 
-@[simp] theorem partial_of_emp {A B : Type} (p : Partial A B) : partial_of empty_partial p := by {
+@[simp] theorem partial_of_emp {A B : Type} (p : Partial A B) : empty_partial ⊆ p := by {
   simp[partial_of, empty_partial];
 }
 
-@[simp] theorem partial_of_singleton {A B : Type} (a : A) (b : B) (p : Partial A B) : partial_of (singleton_partial a b) p ↔ (p a = some b) := by {
+@[simp] theorem partial_of_singleton {A B : Type} (a : A) (b : B) (p : Partial A B) : ((singleton_partial a b) ⊆ p) ↔ (p a = some b) := by {
   simp [partial_of];
   simp [singleton_partial];
   apply Iff.intro;
@@ -111,7 +114,7 @@ def partial_of {A B : Type} (p1 p2 : Partial A B) : Prop :=
   }
 }
 
-theorem partial_of_self (p : Partial A B) : partial_of p p := by {
+theorem partial_of_self (p : Partial A B) : p ⊆ p := by {
   simp[partial_of];
   intro x;
   apply Or.elim (Classical.em (p x).isSome);
@@ -128,7 +131,34 @@ theorem partial_of_self (p : Partial A B) : partial_of p p := by {
   }
 }
 
-theorem disjoint_partial {p1 p2 p1' : Partial A B} : (disjoint p1 p2) → (partial_of p1' p1) → (disjoint p1' p2) := by {
+theorem partial_of_transitive {p1 p2 p3 : Partial A B} : p1 ⊆ p2 → p2 ⊆ p3 → p1 ⊆ p3 := by {
+  simp[partial_of];
+  intro p1_p2 p2_p3;
+  intro x;
+  have := p1_p2 x;
+  apply Or.elim (Classical.em (p1 x).isSome);
+  case left  => {
+    simp[is_some];
+    intro ⟨ witness, proof ⟩;
+    rw[proof];
+    simp;
+    rw[proof] at this;
+    simp at this;
+    have p2_x := this;
+    have := p2_p3 x;
+    rw[p2_x] at this;
+    simp at this;
+    exact this;
+  }
+  case right => {
+    rw[is_not_some];
+    intro not_p1_x;
+    rw[not_p1_x];
+    simp;
+  }
+}
+
+theorem disjoint_partial {p1 p2 p1' : Partial A B} : p1 ⊥ p2 → p1' ⊆ p1 → p1' ⊥ p2 := by {
   simp[disjoint, partial_of, set_intersection, empty_set];
   intro disjoint_proof;
   intro partial_proof;
@@ -158,7 +188,9 @@ theorem disjoint_partial {p1 p2 p1' : Partial A B} : (disjoint p1 p2) → (parti
 noncomputable def union {A : Type} (p1 p2 : Partial A B) : Partial A B :=
 λ x => if (p1 x) = none then (p2 x) else (p1 x)
 
-theorem union_disjoint_symm {A B : Type} (p1 p2 : Partial A B) : (disjoint p1 p2) → (union p1 p2) = (union p2 p1) := by {
+infix:60 " ∪ " => union
+
+theorem union_disjoint_symm : p1 ⊥ p2 → p1 ∪ p2 = p2 ∪ p1 := by {
   simp[disjoint, union, set_intersection, empty_set];
   intro disjoint_proof;
   apply funext;
@@ -184,7 +216,7 @@ theorem union_disjoint_symm {A B : Type} (p1 p2 : Partial A B) : (disjoint p1 p2
   }
 }
 
-theorem partial_of_p1_union {A B : Type} (p p1 p2 : Partial A B) : (disjoint p1 p2) → p = (union p1 p2) → (partial_of p1 p) := by {
+theorem partial_of_p1_union : p1 ⊥ p2 → p = p1 ∪ p2 → p1 ⊆ p := by {
   simp[union];
   intro disjoint_proof p_defn;
   simp[partial_of];
@@ -204,18 +236,139 @@ theorem partial_of_p1_union {A B : Type} (p p1 p2 : Partial A B) : (disjoint p1 
   }
 }
 
-theorem partial_of_union {A B : Type} (p p1 p2 : Partial A B) : (disjoint p1 p2) → p = (union p1 p2) → (partial_of p1 p) ∧ (partial_of p2 p) := by {
+theorem partial_of_union : p1 ⊥ p2 → p = p1 ∪ p2 → p1 ⊆ p ∧ p2 ⊆ p := by {
   intro disjoint_proof_p1_p2 p_p1_p2;
   have disjoint_proof_p2_p1 := (disjoint_symm.mp disjoint_proof_p1_p2);
-  have p_p2_p1 : p = (union p2 p1) := by { rw[(union_disjoint_symm p1 p2 disjoint_proof_p1_p2)] at p_p1_p2; exact p_p1_p2;};
-  apply And.intro (partial_of_p1_union p p1 p2 disjoint_proof_p1_p2 p_p1_p2)
-                  (partial_of_p1_union p p2 p1 disjoint_proof_p2_p1 p_p2_p1);
+  have p_p2_p1 : p = (union p2 p1) := by { rw[(union_disjoint_symm disjoint_proof_p1_p2)] at p_p1_p2; exact p_p1_p2;};
+  apply And.intro (partial_of_p1_union disjoint_proof_p1_p2 p_p1_p2)
+                  (partial_of_p1_union disjoint_proof_p2_p1 p_p2_p1);
 }
 
-def partial_difference {A : Type} (p1 p2 : Partial A A) : Partial A A :=
+noncomputable def partial_difference {A B : Type} (p1 p2 : Partial A B) : Partial A B :=
 λ x => match (p2 x) with
   | some _ => none
   | none => p1 x
+
+infix:60 "\\" => partial_difference
+
+theorem eq_false'' {A : Prop} : (A = False) → ¬ A := by {
+  intro a_false;
+  intro a;
+  rw[a_false] at a;
+  exact a;
+}
+
+theorem exists_witness {A : Type} : (witness : A) → (∃ (a : A) , witness = a) := by {
+  intro witness;
+  apply Exists.intro witness;
+  simp;
+}
+
+theorem partial_of_disjoint_subtraction {A B : Type} {p1 p2 p3 : Partial A B} : p1 ⊆ p3 ∧ disjoint p1 p2 → p1 ⊆ (partial_difference p3 p2) := by {
+  simp [partial_of, partial_difference, disjoint, set_intersection, empty_set];
+  intro ⟨ partial_p1_p3 , disjoint_p1_p2 ⟩ x;
+  have partial_p1_p3_x := partial_p1_p3 x;
+  apply Or.elim (Classical.em (p1 x).isSome);
+  case left  => {
+    rw[is_some];
+    intro ⟨ witness, proof⟩;
+    rw[proof];
+    simp;
+    rw[proof] at partial_p1_p3_x;
+    simp at partial_p1_p3_x;
+    have := (congrFun disjoint_p1_p2) x;
+    rw[proof] at this;
+    rw[is_some] at this;
+    simp at this;
+    have := eq_false'' this;
+    simp[(exists_witness witness)] at this;
+    rw[is_not_some''] at this;
+    simp[this];
+    assumption;
+  }
+  case right => {
+    rw[is_not_some];
+    intro p1_x_none;
+    rw[p1_x_none];
+    simp;
+  }
+}
+
+theorem partial_of_difference_self {A B : Type} (p1 p2 : Partial A B) : partial_difference p1 p2 ⊆ p1 := by {
+  simp[partial_of, partial_difference];
+  intro x;
+  apply Or.elim (Classical.em (p2 x).isSome);
+  case left  => {
+    rw[is_some];
+    intro ⟨ proof , witness ⟩;
+    simp[witness];
+  }
+  case right => {
+    rw[is_not_some];
+    intro not_p2_x;
+    simp[not_p2_x];
+    apply Or.elim (Classical.em (p1 x).isSome);
+    case left  => {
+      rw[is_some];
+      intro ⟨ witness , proof ⟩;
+      simp[proof];
+    }
+    case right => {
+      rw[is_not_some];
+      intro not_p1_x;
+      simp[not_p1_x];
+    }
+  }
+}
+
+theorem difference_disjoint {A B : Type} (p1 p2 : Partial A B) : partial_difference p1 p2 ⊥ p2 := by {
+  simp[partial_difference, disjoint, set_intersection, empty_set];
+  apply funext;
+  intro x;
+  apply Or.elim (Classical.em (p2 x).isSome);
+  case left  => {
+    rw[is_some];
+    intro ⟨ witness, proof ⟩;
+    rw[proof];
+    simp[Option.isSome];
+  }
+  case right => {
+    rw[is_not_some];
+    intro p2_x_none;
+    simp[p2_x_none, Option.isSome];
+  }
+}
+
+theorem difference_union_opposite {p1 p2 : Partial A B} : p2 ⊆ p1 → p1 = (partial_difference p1 p2) ∪ p2 := by {
+  simp[partial_difference, union, partial_of];
+  intro p2_p1;
+  apply funext;
+  intro x;
+  apply Or.elim (Classical.em (p2 x).isSome);
+  case left  => {
+    rw[is_some];
+    intro ⟨ witness, proof ⟩;
+    simp[proof];
+    have := p2_p1 x;
+    rw[proof] at this;
+    simp at this;
+    exact this;
+  }
+  case right => {
+    rw[is_not_some];
+    intro p2_x_none;
+    simp[p2_x_none];
+    apply Or.elim (Classical.em (p1 x).isSome);
+    · rw[is_some]; intro ⟨ witness , proof ⟩ ; simp[proof];
+    · rw[is_not_some]; intro temp; simp[temp];
+  }
+}
+
+theorem difference_union_opposite' {p1 p2 : Partial A B} : p2 ⊆ p1 → p1 = p2 ∪ (partial_difference p1 p2) := by {
+  rw[union_disjoint_symm];
+  exact difference_union_opposite;
+  exact disjoint_symm.mp (difference_disjoint p1 p2);
+}
 
 def asrt (q : Asrt) (s : Store) (h : Heap) : Prop := match q with
   | literal b => b
@@ -230,7 +383,7 @@ noncomputable def check (q : Asrt) (s : Store) (h : Heap) : (Prop × Heap) := ma
   | emp       => (True, empty_partial)
   | singleton v1 v2 => (h (s v1) = some (s v2) , singleton_partial_some (s v1) (h (s v1)))
   | sep q1 q2 => let ⟨ b1 , m1 ⟩ := (check q1 s h); let ⟨ b2 , m2 ⟩ := (check q2 s h); (b1 ∧ b2 ∧ (disjoint m1 m2) , (union m1 m2))
---  | sepimp q1 q2 => let ⟨ b1 , m1 , t1 ⟩ := (check q1 s h); let ⟨ b2 , m2 , t2 ⟩ := (check q2 s h); (b1 → b2 ∧ partial_of m1 m2 , partial_difference m2 m1 , sorry)
+--  | sepimp q1 q2 => let ⟨ b1 , m1 , t1 ⟩ := (check q1 s h); let ⟨ b2 , m2 , t2 ⟩ := (check q2 s h); (b1 → b2 ∧ m1 ⊆ m2 , partial_difference m2 m1 , sorry)
 
 def tight (q : Asrt) : Prop := match q with
   | literal lit => False
@@ -239,12 +392,7 @@ def tight (q : Asrt) : Prop := match q with
   | sep q1 q2 => tight q1 ∧ tight q2
 --  | sepimp q1 q2 => False;
 
-
-theorem tightness : let ⟨ b , m ⟩ := (check q s h_tilde); (b ∧ ¬ tight q) → ∀ h : Heap , (partial_of m h ∧ partial_of h h_tilde → asrt q s h) := by {
-  sorry;
-}
-
-theorem partiality (q : Asrt) (s : Store) (h_tilde : Heap) : partial_of (check q s h_tilde).2 h_tilde := by {
+theorem partiality (q : Asrt) (s : Store) (h_tilde : Heap) : (check q s h_tilde).2 ⊆ h_tilde := by {
   match q with
   | literal lit => simp;
   | emp => simp;
@@ -373,7 +521,7 @@ theorem partiality (q : Asrt) (s : Store) (h_tilde : Heap) : partial_of (check q
 theorem uniqueness :
   (check q s h_tilde).1 ∧ tight q → ∀ h h' , (asrt q s h ∧ asrt q s h' → h = h') := by {
     match q with
-  | literal lit => simp[asrt]; sorry;
+  | literal lit => simp[asrt, tight];
   | emp => {
     intro ⟨ a, b ⟩ h h';
     simp[asrt];
@@ -425,7 +573,7 @@ theorem uniqueness :
   }-/
 }
 
-theorem check_of_superset (q : Asrt) (s : Store) (h h_tilde : Heap) : (check q s h).1 ∧ partial_of h h_tilde → (check q s h) = (check q s h_tilde) := by {
+theorem check_of_superset : (check q s h).1 ∧ h ⊆ h_tilde → (check q s h) = (check q s h_tilde) := by {
   match q with
   | literal lit => simp[check];
   | emp => simp[check];
@@ -439,8 +587,8 @@ theorem check_of_superset (q : Asrt) (s : Store) (h h_tilde : Heap) : (check q s
   | sep q1 q2 => {
     simp[check];--, partial_of];
     intro ⟨ ⟨ a1 , a2 , a3 ⟩ , b ⟩;
-    have c1 := check_of_superset q1 s h h_tilde (And.intro a1 b);
-    have c2 := check_of_superset q2 s h h_tilde (And.intro a2 b);
+    have c1 := check_of_superset (And.intro a1 b);
+    have c2 := check_of_superset (And.intro a2 b);
     simp[c1, c2];
   }
 --  | sepimp q1 q2 => sorry;
@@ -458,7 +606,7 @@ theorem no_false_neg : (asrt q s h) → (check q s h).1 := by {
     apply And.intro;
     case left  => {
       have q1h1_b := (no_false_neg q1h1)
-      have q1h := check_of_superset q1 s h1 h (And.intro q1h1_b (partial_of_union h h1 h2 disjoint_h1_h2 h_h1_h2).1);
+      have q1h := check_of_superset (And.intro q1h1_b (partial_of_union disjoint_h1_h2 h_h1_h2).1);
       rw[← q1h];
       exact q1h1_b;
     }
@@ -466,18 +614,18 @@ theorem no_false_neg : (asrt q s h) → (check q s h).1 := by {
       apply And.intro;
       case left  => {
         have q2h2_b := (no_false_neg q2h2)
-        have q2h := check_of_superset q2 s h2 h (And.intro q2h2_b (partial_of_union h h1 h2 disjoint_h1_h2 h_h1_h2).2);
+        have q2h := check_of_superset (And.intro q2h2_b (partial_of_union disjoint_h1_h2 h_h1_h2).2);
         rw[← q2h];
         exact q2h2_b;
       }
       case right => {
         have c_q1h1_b := no_false_neg q1h1;
-        have q1_equiv := check_of_superset q1 s h1 h (And.intro c_q1h1_b (partial_of_union h h1 h2 disjoint_h1_h2 h_h1_h2).1);
+        have q1_equiv := check_of_superset (And.intro c_q1h1_b (partial_of_union disjoint_h1_h2 h_h1_h2).1);
         have subset_1 := partiality q1 s h1;
         rw[q1_equiv] at subset_1;
 
         have c_q2h2_b := no_false_neg q2h2;
-        have q2_equiv := check_of_superset q2 s h2 h (And.intro c_q2h2_b (partial_of_union h h1 h2 disjoint_h1_h2 h_h1_h2).2);
+        have q2_equiv := check_of_superset (And.intro c_q2h2_b (partial_of_union disjoint_h1_h2 h_h1_h2).2);
         have subset_2 := partiality q2 s h2;
         rw[q2_equiv] at subset_2;
 
@@ -493,144 +641,82 @@ theorem no_false_neg : (asrt q s h) → (check q s h).1 := by {
 }
 
 theorem no_false_pos : let ⟨ b, m ⟩ := (check q s h_tilde); b → asrt q s m := by {
-  sorry
-}
-
-/-
---  | emp       => ∀ x , (dom h) x = false
-theorem equivalence_emp (s : Store) (h_tilde : Heap) : (let ⟨ b , m ⟩ := (check emp s h_tilde);  (b ↔ if t then (asrt emp s m) else (asrt emp s h_tilde))) := by {
-  simp[asrt];
-  simp[empty_partial];
-}
-
---  | singleton v1 v2 => (Option.bind (s v1) h) = (s v2) ∧ (in_partial v1 s) ∧ (in_partial v2 s) ∧ ∀ x , (dom h) x = (some x = (s v1))
-theorem equivalence_singleton (s : Store) (h_tilde : Heap) : (let ⟨ b , m , t ⟩ := (check (singleton v1 v2) s h_tilde);  (b ↔ if t then (asrt (singleton v1 v2) s m) else (asrt (singleton v1 v2) s h_tilde))) := by {
-  apply Iff.intro;
-  case mp  => {
+  match q with
+  | literal lit =>   simp[check, asrt]; intro; assumption;
+  | emp => simp[check, asrt, empty_partial];
+  | singleton v1 v2 => {
+    simp[check, asrt, singleton_partial_some, singleton_partial];
     intro points;
-    simp[asrt];
-    rw [if_pos]
-    
-    apply And.intro;
+    rw[points];
+    simp;
+    intro x;
+    apply Or.elim (Classical.em (x = s v1));
     case left  => {
-      simp[points];
-      simp[singleton_partial_some];
-      simp[singleton_partial];
+      intro x_s_v1;
+      simp[x_s_v1, Option.isSome];
     }
     case right => {
-      intro x;
-      simp[points, singleton_partial_some, singleton_partial];
-      rw[is_some];
-      apply Or.elim (Classical.em (x = s v1));
-      case left  => intro temp; simp[temp]; apply Exists.intro (s v2); simp;
-      case right => intro temp; simp[temp]; intro n; have ⟨ a, f⟩ := n; contradiction;
+      intro not_x_s_v1;
+      simp[not_x_s_v1];
     }
-    case hc => simp;
   }
-  case mpr => {
-    rw[if_pos];
-    simp[asrt];
-    intro ⟨ l, r ⟩;
-    revert l;
-    simp[singleton_partial_some];
-    apply Or.elim (Classical.em (h_tilde (s v1)).isSome);
-    case left  => {
-      rw[is_some];
-      intro ⟨ witness, proof ⟩;
-      simp[proof];
-      simp[singleton_partial];
-      intro;
-      assumption;
-    }
-    case right => {
-      rw[is_not_some];
-      intro contr;
-      simp[contr];
-      simp[empty_partial];
-    }
-    case hc => simp;
+  | sep q1 q2 => {
+    simp[check, asrt];
+    intro ⟨ b1 , b2 , disjoint_m1_m2 ⟩ ;
+    apply Exists.intro (check q1 s h_tilde).2;
+    apply Exists.intro (check q2 s h_tilde).2;
+    apply And.intro (no_false_pos b1);
+    apply And.intro (no_false_pos b2);
+    apply And.intro (disjoint_m1_m2);
+    simp;
   }
 }
---  | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
-theorem equivalence_sep (s : Store) (h_tilde : Heap) : (let ⟨ b , m , t ⟩ := (check (sep q1 q2) s h_tilde);  (b ↔ if t then (asrt (sep q1 q2) s m) else (asrt (sep q1 q2) s h_tilde))) := by {
-  simp;
-  apply Iff.intro;
-  case mp  => {
-    intro ⟨ a, b, c ⟩;
-    apply Or.elim (Classical.em ((check q1 s h_tilde).2.2 ∧ (check q2 s h_tilde).2.2));
+
+variable (q : Asrt)
+variable (s : Store)
+variable (h_tilde : Heap)
+variable (b : (check q s h_tilde).1)
+
+theorem tightness {q s h_tilde} : let ⟨ b , m ⟩ := (check q s h_tilde); (b ∧ ¬ tight q) → ∀ h : Heap , m ⊆ h ∧ h ⊆ h_tilde → asrt q s h := by {
+  match q with
+  | literal lit => simp[asrt, check]; intro ⟨ _ , _ ⟩ _ _; assumption;
+  | emp => simp[asrt, check, tight];
+  | singleton v1 v2 => simp[tight];
+  | sep q1 q2 => {
+    simp[check, tight];
+    intro ⟨ ⟨ b1 , b2 , disjoint_m1_m2 ⟩ , not_both_tight ⟩ h;
+    rw [de_morgan] at not_both_tight;
+    intro ⟨ partial_m_h , partial_h_h_tilde ⟩;
+    have check_q_s_h_tilde : (check (sep q1 q2) s h_tilde).1 := And.intro b1 (And.intro b2 disjoint_m1_m2);
+    have check_q_s_m : (check (sep q1 q2) s (check (sep q1 q2) s h_tilde).2).1 := no_false_neg (no_false_pos check_q_s_h_tilde);
+    have partial_m1_h := partial_of_transitive (partial_of_union disjoint_m1_m2 rfl).left  partial_m_h;
+    have partial_m2_h := partial_of_transitive (partial_of_union disjoint_m1_m2 rfl).right partial_m_h;
+    apply Or.elim not_both_tight;
     case left  => {
-      intro ⟨ t1, t2 ⟩;
-      simp[t1, t2];
-      simp[union];
-      simp[asrt];
-      simp at equivalence;
-      rw[equivalence] at a;
-      simp[t1] at a;
-      rw[equivalence] at b;
-      simp[t2] at b;
-      apply Exists.intro (check q1 s h_tilde).2.1;
-      apply Exists.intro (check q2 s h_tilde).2.1;
-      apply And.intro;
-      case left  => exact a;
-      case right => {
-        apply And.intro;
-        case left  => exact b;
-        case right => {
-          apply And.intro;
-          case left  => exact c;
-          case right => simp[union];
-        }
-      }
+      intro not_tight_q1;
+      apply Exists.intro (partial_difference h (check q2 s h_tilde).2);
+      apply Exists.intro (check q2 s h_tilde).2;
+      have partial_m1_diff := partial_of_disjoint_subtraction (And.intro partial_m1_h disjoint_m1_m2);
+      have b1_m1_eq_check_q1_s_diff := check_of_superset (And.intro (no_false_neg (no_false_pos b1)) partial_m1_diff);
+      apply And.intro (tightness (And.intro b1 not_tight_q1) (partial_difference h (check q2 s h_tilde).2) (And.intro partial_m1_diff (partial_of_transitive (partial_of_difference_self h (check q2 s h_tilde).2) partial_h_h_tilde)));
+      apply And.intro (no_false_pos b2);
+      apply And.intro (difference_disjoint h (check q2 s h_tilde).2);
+      exact (difference_union_opposite partial_m2_h);
     }
     case right => {
-      intro not_ts;
-      simp[not_ts];
-      simp[asrt];
-      rw[de_morgan] at not_ts;
-      apply Exists.intro (check q1 s h_tilde).2.1;
-      apply Exists.intro (check q2 s h_tilde).2.1;
-      simp[c];
-      simp at equivalence;
-      rw[equivalence] at a;
-      rw[equivalence] at b;
-      apply Or.elim (Classical.em (check q1 s h_tilde).2.2);
-      case left  => {
-        intro t1;
-        simp[t1] at not_ts;
-        have nt2 := by { exact not_ts }
-        simp[t1] at a;
-        simp[nt2] at b;
-        sorry;
-      }
-      case right => {
-        intro nt1;
-        sorry;
-      }
+      intro not_tight_q2;
+      apply Exists.intro (check q1 s h_tilde).2;
+      apply Exists.intro (partial_difference h (check q1 s h_tilde).2);
+      have partial_m2_diff := partial_of_disjoint_subtraction (And.intro partial_m2_h (disjoint_symm.mp disjoint_m1_m2));
+      have b2_m2_eq_check_q2_s_diff := check_of_superset (And.intro (no_false_neg (no_false_pos b2)) partial_m2_diff);
+      apply And.intro (no_false_pos b1);
+      apply And.intro (tightness (And.intro b2 not_tight_q2) (partial_difference h (check q1 s h_tilde).2) (And.intro partial_m2_diff (partial_of_transitive (partial_of_difference_self h (check q1 s h_tilde).2) partial_h_h_tilde)));
+      apply And.intro (disjoint_symm.mp (difference_disjoint h (check q1 s h_tilde).2));
+      exact (difference_union_opposite' partial_m1_h);
     }
   }
-  case mpr => {
-    split;
-    case inl temp => {
-      have ⟨ t1 , t2 ⟩ := temp;
-      simp[asrt];
-      intro ⟨ h1 , h2 , q1_h1 , q2_h2 , h1h2_disjoint , matching_unions ⟩;
-      apply And.intro;
-      case left => {
-        simp at equivalence;
-        rw[equivalence];
-        rw[(if_pos t1)];
---        have temp := uniqueness q1 s h_tilde;
-        sorry;
-      }
-      sorry;
-    }
-    case inr => {
-      sorry;
-    }
-  }
+--  | sepimp q1 q2 => False;
 }
---  | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
--/
 
 theorem equivalence (s : Store) (h_tilde : Heap) : let ⟨ b , m ⟩ := (check q s h_tilde); asrt q s h_tilde ↔ b ∧ (tight q → h_tilde = m) := by {
   simp;
