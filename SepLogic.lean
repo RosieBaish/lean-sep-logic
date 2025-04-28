@@ -409,7 +409,7 @@ inductive Asrt (v : Type _) where
   | emp : Asrt v
   | singleton : Set v → Set v → Asrt v
   | sep : Asrt v → Asrt v → Asrt v
---  | sepimp : Asrt v → Asrt v → Asrt
+  | sepimp : Asrt v → Asrt v → Asrt v
 open Asrt
 
 def Store (v : Type _) : Type := Set v → Set v
@@ -421,7 +421,7 @@ def asrt {v : Type _} (q : Asrt v) (s : Store v) (h : Heap v) : Prop := match q 
   | emp       => h.Dom = ∅
   | Asrt.singleton v1 v2 => h (s v1) = some (s v2) ∧ ∀ x , x ∈ h.Dom ↔ (x = (s v1))
   | sep q1 q2 => ∃ h1 h2 , (asrt q1 s h1) ∧ (asrt q2 s h2) ∧ (disjoint h1 h2) ∧ h = (union h1 h2)
---  | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
+  | sepimp q1 q2 => ∀ h' , (asrt q1 s h') ∧ disjoint h h' -> asrt q2 s (union h h')
 
 @[simp]
 noncomputable def check {v : Type _} (q : Asrt v) (s : Store v) (h : Heap v) : (Prop × Heap v) := match q with
@@ -429,14 +429,14 @@ noncomputable def check {v : Type _} (q : Asrt v) (s : Store v) (h : Heap v) : (
   | emp       => (True, empty_partial)
   | Asrt.singleton v1 v2 => (h (s v1) = some (s v2) , singleton_partial_some (s v1) (h (s v1)))
   | sep q1 q2 => let ⟨ b1 , m1 ⟩ := (check q1 s h); let ⟨ b2 , m2 ⟩ := (check q2 s h); (b1 ∧ b2 ∧ (disjoint m1 m2) , (union m1 m2))
---  | sepimp q1 q2 => let ⟨ b1 , m1 , t1 ⟩ := (check q1 s h); let ⟨ b2 , m2 , t2 ⟩ := (check q2 s h); (b1 → b2 ∧ m1 ⊆ m2 , partial_difference m2 m1 , sorry)
+  | sepimp q1 q2 => let ⟨ b1 , m1 ⟩ := (check q1 s h); let ⟨ b2 , m2 ⟩ := (check q2 s h); (b1 → b2 ∧ m1 ⊆ m2 , partial_difference m2 m1)
 
 def tight {v : Type _} (q : Asrt v) : Prop := match q with
   | literal _ => False
   | emp => True
   | Asrt.singleton _ _ => True
   | sep q1 q2 => tight q1 ∧ tight q2
---  | sepimp q1 q2 => False;
+  | sepimp _ q2 => tight q2
 
 theorem partiality {v: Type _} (q : Asrt v) (s : Store v) (h_tilde : Heap v) : (check q s h_tilde).2 ⊆ h_tilde := by
   match q with
@@ -459,55 +459,13 @@ theorem partiality {v: Type _} (q : Asrt v) (s : Store v) (h_tilde : Heap v) : (
     simp [check]
     apply subset_union
     exact ⟨ partial1, partial2 ⟩
-/-  | sepimp q1 q2 => {
-    have partial1 := partiality q1 s h_tilde;
-    have partial2 := partiality q2 s h_tilde;
-    simp[check];
-    simp[partial_of];
-    intro x;
-    simp[partial_difference];
-    simp[partial_of] at partial1;
-    have partial1_1 := partial1 x;
-    simp[partial_of] at partial2;
-    have partial2_1 := partial2 x;
-    apply Or.elim (Classical.em ((check q1 s h_tilde).2.1 x = none));
-    case left  => {
-      apply Or.elim (Classical.em ((check q2 s h_tilde).2.1 x = none));
-      case left => intro temp1 temp2; simp[temp1, temp2];
-      case right => {
-        intro temp1 temp2;
-        rw[← is_not_some] at temp1;
-        simp[dne] at temp1;
-        rw[is_some] at temp1;
-        have ⟨ witness, proof ⟩ := temp1;
-        simp[proof, temp2];
-        rw[proof] at partial2_1;
-        simp at partial2_1;
-        exact partial2_1;
-      }
-    }
-    case right => {
-      apply Or.elim (Classical.em ((check q2 s h_tilde).2.1 x = none));
-      case left  => {
-        intro temp1 temp2;
-        simp[temp1, temp2];
-        rw[← is_not_some] at temp2;
-        simp[dne] at temp2;
-        rw[is_some] at temp2;
-        have ⟨ witness, proof ⟩ := temp2;
-        simp[proof];
-      }
-      case right => {
-        intro temp1 temp2;
-        simp[temp1, temp2];
-        rw[← is_not_some] at temp2;
-        simp[dne] at temp2;
-        rw[is_some] at temp2;
-        have ⟨ witness, proof ⟩ := temp2;
-        simp[proof];
-      }
-    }
-  }-/
+  | sepimp q1 q2 =>
+    have partial1 := partiality q1 s h_tilde
+    have partial2 := partiality q2 s h_tilde
+    unfold check
+    simp only
+    have := (partial_of_difference_self (check q2 s h_tilde).2 (check q1 s h_tilde).2)
+    exact partial_of_transitive this partial2
 
 theorem uniqueness {v : Type _} {q : Asrt v} {s : Store v} {h_tilde : Heap v}:
   (check q s h_tilde).1 ∧ tight q → ∀ h h' , (asrt q s h ∧ asrt q s h' → h = h') := by
@@ -558,11 +516,11 @@ theorem uniqueness {v : Type _} {q : Asrt v} {s : Store v} {h_tilde : Heap v}:
     have h1_same := q1_uniqueness h1 h1' (And.intro asrt_q1h1 asrt_q1h1')
     have h2_same := q2_uniqueness h2 h2' (And.intro asrt_q2h2 asrt_q2h2')
     simp only [h_h1_h2, h_h1_h2', h1_same, h2_same]
-  /-
-  | sepimp q1 q2 => {
-    simp;
-    sorry;
-  }-/
+  | sepimp q1 q2 =>
+    sorry
+
+
+
 
 theorem check_of_superset {v : Type _} {q : Asrt v} {s : Store v} {h h_tilde : Heap v} : (check q s h).1 ∧ h ⊆ h_tilde → (check q s h) = (check q s h_tilde) := by
   cases q with
@@ -581,7 +539,26 @@ theorem check_of_superset {v : Type _} {q : Asrt v} {s : Store v} {h h_tilde : H
     have c1 := check_of_superset (And.intro a1 b)
     have c2 := check_of_superset (And.intro a2 b)
     simp[c1, c2]
---  | sepimp q1 q2 => sorry;
+  | sepimp q1 q2 =>
+    unfold check
+    simp only [Prod.mk.injEq, eq_iff_iff, and_imp]
+    intro imp
+    intro subset
+    constructor
+    · constructor
+      · intro imp2
+        intro check1_h_tilde
+        constructor
+        · suffices (check q2 s h).1 by
+            have eq := check_of_superset ⟨this, subset⟩
+            rw [← eq]
+            exact this
+          suffices (check q1 s h).1 by simp [imp this]
+
+          sorry
+        · sorry
+      · sorry
+    · sorry
 
 theorem no_false_neg : (asrt q s h) → (check q s h).1 := by
   cases q with
@@ -621,7 +598,7 @@ theorem no_false_neg : (asrt q s h) → (check q s h).1 := by
         have temp2 := disjoint_partial temp subset_2
         rw[disjoint_symm] at temp2
         exact temp2
---  | sepimp q1 q2 => sorry;
+  | sepimp q1 q2 => sorry
 
 theorem no_false_pos {v q s} {h_tilde : Heap v} : let ⟨ b, m ⟩ := (check q s h_tilde); b → asrt q s m := by
   cases q with
@@ -651,6 +628,7 @@ theorem no_false_pos {v q s} {h_tilde : Heap v} : let ⟨ b, m ⟩ := (check q s
     apply And.intro (no_false_pos b2)
     apply And.intro (disjoint_m1_m2)
     simp
+  | sepimp q1 q2 => sorry
 
 variable (q : Asrt v)
 variable (s : Store v)
@@ -688,7 +666,7 @@ theorem tightness {q s h_tilde} : let ⟨ b , m ⟩ := (check q s h_tilde); (b �
       apply And.intro (tightness (And.intro b2 not_tight_q2) (partial_difference h (check q1 s h_tilde).2) (And.intro partial_m2_diff (partial_of_transitive (partial_of_difference_self h (check q1 s h_tilde).2) partial_h_h_tilde)))
       apply And.intro (disjoint_symm.mp (difference_disjoint h (check q1 s h_tilde).2))
       exact (difference_union_opposite' partial_m1_h)
---  | sepimp q1 q2 => False;
+  | sepimp q1 q2 => sorry
 
 theorem equivalence (s : Store v) (h_tilde : Heap v) : let ⟨ b , m ⟩ := (check q s h_tilde); asrt q s h_tilde ↔ b ∧ (tight q → h_tilde = m) := by
   simp
